@@ -1,0 +1,12 @@
+{
+  "adminBot": [
+    "100071880593545"
+  ],
+  "nickNameBot": "mini-Bot",
+  "prefix": "/",
+  "autoSetNickname": true,
+  "authorFB": "https://www.facebook.com/profile.php?id=100071880593545",
+  "authorName": "AminulSardar",
+  "authorEmail": "secret",
+  "timeZone": "Asia/Dhaka"
+}
