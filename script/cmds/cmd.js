@@ -25,6 +25,7 @@ function fetchCodeFromUrl(url) {
 module.exports = {
   config: {
     name: "cmd",
+    aliases: ["command", "loadcmd", "reload"],
     version: "2.0.0",
     author: "AminulSardar",
     role: 1, // Admin only

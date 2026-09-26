@@ -83,10 +83,12 @@ let botApi = null;
 // COMMAND & EVENT LOADERS
 // ==========================================
 const commands = new Map();
+const aliases = new Map();
 const events = new Map();
 
 function loadCommands() {
   commands.clear();
+  aliases.clear();
   const cmdsDir = path.join(__dirname, "script", "cmds");
   if (!fs.existsSync(cmdsDir)) {
     fs.mkdirSync(cmdsDir, { recursive: true });
@@ -99,20 +101,35 @@ function loadCommands() {
       delete require.cache[require.resolve(filePath)];
       const cmd = require(filePath);
       const name = (cmd.config && cmd.config.name) || file.replace(/\.js$/, "");
-      commands.set(name.toLowerCase(), {
+      const rawAliases = (cmd.config && (cmd.config.aliases || cmd.config.alias)) || [];
+      const aliasesList = Array.isArray(rawAliases) ? rawAliases : [rawAliases].filter(Boolean);
+
+      const cmdObj = {
         ...cmd,
         fileName: file,
         config: {
           name,
+          aliases: aliasesList,
+          hasPrefix: cmd.config?.hasPrefix !== false,
+          nonPrefix: !!cmd.config?.nonPrefix,
           category: (cmd.config && cmd.config.category) || "general",
           role: (cmd.config && cmd.config.role) !== undefined ? cmd.config.role : 0,
           shortDescription: (cmd.config && (cmd.config.shortDescription || cmd.config.description)) || "",
           longDescription: (cmd.config && cmd.config.longDescription) || "",
           guide: (cmd.config && cmd.config.guide) || `{p}${name}`,
-          author: (cmd.config && cmd.config.author) || config.authorName || "AminulSardar"
+          author: (cmd.config && (cmd.config.author || cmd.config.credits)) || config.authorName || "AminulSardar"
         }
-      });
-      logger.success(`Loaded Command: [${name}]`, "COMMAND");
+      };
+
+      commands.set(name.toLowerCase(), cmdObj);
+
+      for (const al of aliasesList) {
+        if (typeof al === "string" && al.trim()) {
+          aliases.set(al.trim().toLowerCase(), name.toLowerCase());
+        }
+      }
+
+      logger.success(`Loaded Command: [${name}] (Aliases: ${aliasesList.join(", ") || "none"})`, "COMMAND");
     } catch (err) {
       logger.error(`Failed to load command ${file}: ${err.message}`, "LOADER");
     }
@@ -170,7 +187,9 @@ function formatUptime(ms) {
 // COMMAND EXECUTION HANDLER
 // ==========================================
 async function executeCommand({ commandName, args, event, api, sendReply }) {
-  const cmd = commands.get(commandName.toLowerCase());
+  const norm = commandName.toLowerCase();
+  const resolvedName = aliases.get(norm) || norm;
+  const cmd = commands.get(resolvedName);
   if (!cmd) {
     return false;
   }
@@ -181,7 +200,7 @@ async function executeCommand({ commandName, args, event, api, sendReply }) {
   const isSenderAdmin = admins.includes(senderID);
 
   // Global AdminOnly mode check
-  if (config.adminOnly && !isSenderAdmin && commandName.toLowerCase() !== "adminonly") {
+  if (config.adminOnly && !isSenderAdmin && resolvedName !== "adminonly") {
     sendReply(`🔒 Bot is currently in Admin-Only mode. Only administrators can use commands.`);
     return true;
   }
@@ -199,6 +218,7 @@ async function executeCommand({ commandName, args, event, api, sendReply }) {
     message: args.join(" "),
     prefix: config.prefix || "/",
     commands,
+    aliases,
     events,
     config,
     loadCommands,

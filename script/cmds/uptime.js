@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "uptime",
+    aliases: ["upt", "runtime", "runtimeinfo"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

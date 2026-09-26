@@ -35,6 +35,7 @@ function formatUptime(uptimeMs) {
 module.exports = {
   config: {
     name: "bot",
+    aliases: ["বট", "mini", "robot"],
     version: "1.1.0",
     author: "AminulSardar",
     role: 0,

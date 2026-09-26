@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "listbox",
+    aliases: ["groups", "allbox", "grouplist", "boxlist"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 1, // Admin only

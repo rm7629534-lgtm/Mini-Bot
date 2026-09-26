@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "uid",
+    aliases: ["userid", "id", "fbid", "myid"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

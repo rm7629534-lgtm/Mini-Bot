@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "quote",
+    aliases: ["quotes", "motivate", "ukti", "উক্তি"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

@@ -29,6 +29,7 @@ function saveEconomyDB(data) {
 module.exports = {
   config: {
     name: "daily",
+    aliases: ["claim", "dailybonus", "reward"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

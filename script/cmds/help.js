@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "help",
+    aliases: ["menu", "commands", "cmds", "হেল্প"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,
@@ -9,22 +10,25 @@ module.exports = {
     category: "system",
     guide: "{p}help [command_name]"
   },
-  onStart: async function ({ api, event, args, prefix, commands, botName, authorName }) {
+  onStart: async function ({ api, event, args, prefix, commands, aliases, botName, authorName }) {
     const threadID = event.threadID;
     const messageID = event.messageID;
 
     if (args && args.length > 0) {
-      const cmdName = args[0].toLowerCase();
-      const cmd = commands.get(cmdName);
+      const inputName = args[0].toLowerCase();
+      const resolvedName = (aliases && aliases.get(inputName)) || inputName;
+      const cmd = commands.get(resolvedName);
       if (!cmd) {
-        return api.sendMessage(`Command "${cmdName}" does not exist, type help to see all available commands`, threadID, messageID);
+        return api.sendMessage(`Command "${inputName}" does not exist, type ${prefix}help to see all available commands`, threadID, messageID);
       }
       const c = cmd.config || {};
-      const msg = `📖 COMMAND DETAILS: ${c.name || cmdName}
+      const aliasText = Array.isArray(c.aliases) && c.aliases.length > 0 ? c.aliases.join(", ") : "None";
+      const msg = `📖 COMMAND DETAILS: ${c.name || resolvedName}
 ━━━━━━━━━━━━━━━━━━━━
 📌 Description: ${c.longDescription || c.shortDescription || "No description provided."}
 📁 Category: ${c.category || "general"}
 👑 Permission: ${c.role === 1 ? "Admin Only" : c.role === 2 ? "Owner Only" : "Everyone"}
+🏷️ Aliases: ${aliasText}
 ⚙️ Usage: ${(c.guide || `${prefix}${c.name}`).replace(/{p}/g, prefix)}
 👤 Author: ${c.author || authorName || "AminulSardar"}
 ━━━━━━━━━━━━━━━━━━━━`;

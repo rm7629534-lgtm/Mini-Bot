@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "ai",
+    aliases: ["ask", "gpt", "gemini", "botai"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

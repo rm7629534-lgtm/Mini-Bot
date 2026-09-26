@@ -41,6 +41,7 @@ function getWeatherIcon(desc) {
 module.exports = {
   config: {
     name: "weather",
+    aliases: ["abohawa", "temp", "climate", "আবহাওয়া"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

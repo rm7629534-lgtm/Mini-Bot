@@ -35,6 +35,7 @@ function saveWelcomeConfig(data) {
 module.exports = {
   config: {
     name: "welcome",
+    aliases: ["wel", "welcomemode", "setwelcome"],
     version: "2.0.0",
     author: "AminulSardar",
     role: 0,

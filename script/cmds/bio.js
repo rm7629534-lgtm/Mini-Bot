@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "bio",
+    aliases: ["setbio", "botbio", "changebio"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 1, // Admin only

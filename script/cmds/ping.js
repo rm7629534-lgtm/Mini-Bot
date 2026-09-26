@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "ping",
+    aliases: ["speed", "ms", "latency"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

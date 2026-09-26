@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "say",
+    aliases: ["echo", "speak", "voice", "talk"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

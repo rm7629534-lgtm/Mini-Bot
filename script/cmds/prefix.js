@@ -4,6 +4,7 @@ const path = require("path");
 module.exports = {
   config: {
     name: "prefix",
+    aliases: ["প্রিফিক্স", "setprefix", "myprefix"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

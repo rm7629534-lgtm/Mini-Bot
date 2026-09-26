@@ -4,6 +4,7 @@ const path = require("path");
 module.exports = {
   config: {
     name: "admin",
+    aliases: ["admins", "ad", "adminlist"],
     version: "2.0.0",
     author: "AminulSardar",
     role: 0, // List is public, but add/remove enforces admin checks inside onStart

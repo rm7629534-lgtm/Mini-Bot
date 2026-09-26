@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "tid",
+    aliases: ["threadid", "boxid", "groupid"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

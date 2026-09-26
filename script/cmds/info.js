@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "info",
+    aliases: ["about", "developer", "owner", "author"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

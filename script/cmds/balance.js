@@ -19,6 +19,7 @@ function getEconomyDB() {
 module.exports = {
   config: {
     name: "balance",
+    aliases: ["bal", "money", "coins", "wallet"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

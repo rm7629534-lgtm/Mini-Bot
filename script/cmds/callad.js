@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "callad",
+    aliases: ["report", "contact", "calladmin", "feedback"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 0,

@@ -1,6 +1,7 @@
 module.exports = {
   config: {
     name: "pending",
+    aliases: ["pend", "requests", "approve"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 1, // Admin only

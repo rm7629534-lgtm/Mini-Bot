@@ -4,6 +4,7 @@ const path = require("path");
 module.exports = {
   config: {
     name: "adminonly",
+    aliases: ["adonly", "onlyadmin", "admode"],
     version: "1.0.0",
     author: "AminulSardar",
     role: 1, // Admin only
