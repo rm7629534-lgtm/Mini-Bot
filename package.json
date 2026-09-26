@@ -1,0 +1,17 @@
+{
+  "name": "Mini-Bot",
+  "version": "1.0.0",
+  "description": "Facebook Messenger Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "AminulSardar",
+  "license": "MIT",
+  "dependencies": {
+    "abir-fca": "latest"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
