@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-Bot Control Center & Dashboard</title>
+  <meta name="description" content="Manage and monitor Mini-Bot commands, events, config, and system status in real-time.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            dark: {
+              bg: '#090d16',
+              card: '#111827',
+              border: '#1f293d',
+              accent: '#1e293b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #090d16;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+      background-attachment: fixed;
+    }
+    .glass {
+      background: rgba(17, 24, 39, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .glass-card {
+      background: rgba(22, 30, 49, 0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+    @keyframes pulseSlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.02); }
+    }
+    .animate-pulse-glow {
+      animation: pulseSlow 3s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-500 selection:text-white">
+
+  <!-- TOP NAVBAR -->
+  <header class="sticky top-0 z-40 glass border-b border-slate-800/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <i class="fa-solid fa-robot text-lg text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 id="botHeaderTitle" class="text-lg font-bold tracking-tight text-white">Mini-Bot</h1>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Live Server
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Modular FCA Engine &bull; <span id="headerAuthor">Aminul Sardar</span></p>
+        </div>
+      </div>
+
+      <!-- Quick stats & actions -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <button onclick="stopBot()" title="Stop Bot Engine" class="px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 border border-rose-800/60 shadow-md shadow-rose-950/40">
+          <i class="fa-solid fa-power-off text-rose-400"></i>
+          <span>Stop Bot</span>
+        </button>
+        <button onclick="refreshAllData()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition flex items-center gap-1.5 border border-slate-700">
+          <i id="refreshIcon" class="fa-solid fa-rotate-right"></i>
+          <span>Refresh</span>
+        </button>
+        <button onclick="openConfigModal()" class="px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white shadow-lg shadow-brand-500/20 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Config</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- METRICS OVERVIEW CARDS -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Card 1: Server Status -->
+      <div class="glass p-5 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 text-emerald-500/20 group-hover:text-emerald-500/30 transition text-4xl">
+          <i class="fa-solid fa-server"></i>
+        </div>
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Bot Status</span>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="statStatus" class="text-2xl font-bold text-emerald-400">Active</span>
+          <span class="text-xs text-slate-400">Port <span id="statPort">3000</span></span>
+        </div>
+        <p id="statBotID" class="mt-2 text-xs text-slate-400 truncate">UID: <span class="font-mono text-slate-300">Not Logged In</span></p>
+      </div>
+
+      <!-- Card 2: Uptime -->
+      <div class="glass p-5 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 text-indigo-500/20 group-hover:text-indigo-500/30 transition text-4xl">
+          <i class="fa-solid fa-clock"></i>
+        </div>
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Server Uptime</span>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="statUptime" class="text-2xl font-bold text-white font-mono">0d 0h 0m 0s</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-microchip text-slate-500"></i>
+          RAM: <span id="statMemory" class="text-slate-300 font-mono">-- MB</span>
+        </p>
+      </div>
+
+      <!-- Card 3: Loaded Commands -->
+      <div class="glass p-5 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 text-purple-500/20 group-hover:text-purple-500/30 transition text-4xl">
+          <i class="fa-solid fa-terminal"></i>
+        </div>
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Loaded Commands</span>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="statCommandsCount" class="text-2xl font-bold text-purple-400">0</span>
+          <span class="text-xs text-slate-400">scripts in cmds/</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-400">
+          Prefix: <span id="statPrefix" class="font-mono font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">/</span>
+        </p>
+      </div>
+
+      <!-- Card 4: Event Listeners -->
+      <div class="glass p-5 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 text-cyan-500/20 group-hover:text-cyan-500/30 transition text-4xl">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Event Handlers</span>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="statEventsCount" class="text-2xl font-bold text-cyan-400">0</span>
+          <span class="text-xs text-slate-400">active events</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-400">
+          Admins: <span id="statAdminCount" class="font-bold text-slate-300">0</span> configured
+        </p>
+      </div>
+
+    </section>
+
+    <!-- TABBED NAVIGATION & ACTIONS -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-3">
+      <div class="flex space-x-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
+        <button onclick="switchTab('commands')" id="tab-commands" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 transition flex items-center gap-2">
+          <i class="fa-solid fa-terminal"></i>
+          <span>Commands (<span id="tabCmdCount">0</span>)</span>
+        </button>
+        <button onclick="switchTab('events')" id="tab-events" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
+          <i class="fa-solid fa-bolt"></i>
+          <span>Events (<span id="tabEventCount">0</span>)</span>
+        </button>
+        <button onclick="switchTab('appstate')" id="tab-appstate" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
+          <i class="fa-solid fa-key"></i>
+          <span>AppState Auth</span>
+        </button>
+        <button onclick="switchTab('logs')" id="tab-logs" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
+          <i class="fa-solid fa-list-ul"></i>
+          <span>Live Logs</span>
+        </button>
+      </div>
+
+      <!-- Quick search for commands -->
+      <div id="searchContainer" class="relative min-w-[240px]">
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+        <input 
+          type="text" 
+          id="commandSearch" 
+          placeholder="Search commands or categories..." 
+          oninput="filterCommands(this.value)"
+          class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+        >
+      </div>
+    </div>
+
+    <!-- TAB 1: COMMANDS LIST -->
+    <div id="view-commands" class="tab-view space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Modular Command Scripts</span>
+            <span class="text-xs font-normal text-slate-400 font-mono">/script/cmds/*.js</span>
+          </h2>
+          <p class="text-xs text-slate-400">All command modules dynamically loaded and ready for chat events.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="filterCategory('all')" class="cat-pill active px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-indigo-400 border border-indigo-500/30">All</button>
+          <button onclick="filterCategory('system')" class="cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white">System</button>
+          <button onclick="filterCategory('economy')" class="cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white">Economy</button>
+          <button onclick="filterCategory('utility')" class="cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white">Utility</button>
+          <button onclick="filterCategory('admin')" class="cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white">Admin</button>
+          <button onclick="filterCategory('fun')" class="cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white">Fun</button>
+          <button onclick="filterCategory('ai')" class="cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white">AI</button>
+        </div>
+      </div>
+
+      <!-- Commands Grid -->
+      <div id="commandsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Dynamic populated cards -->
+      </div>
+    </div>
+
+    <!-- TAB 2: EVENTS LIST -->
+    <div id="view-events" class="tab-view hidden space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <span>Active Event Listeners</span>
+          <span class="text-xs font-normal text-slate-400 font-mono">/script/events & /events</span>
+        </h2>
+        <p class="text-xs text-slate-400">Handles group join/leave events, bot additions, nickname management, and auto responses.</p>
+      </div>
+
+      <div id="eventsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Dynamic populated event cards -->
+      </div>
+    </div>
+
+    <!-- TAB 3: APPSTATE AUTHENTICATION -->
+    <div id="view-appstate" class="tab-view hidden space-y-4">
+      <div class="glass p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div>
+          <h2 class="text-base font-bold text-white">Facebook AppState Configuration</h2>
+          <p class="text-xs text-slate-400">Manage Facebook session cookies (appState.json) used by <code class="font-mono text-indigo-300">abir-fca</code> for account login.</p>
+        </div>
+
+        <div id="appStateStatusBanner" class="p-4 rounded-xl border flex items-center justify-between">
+          <!-- Dynamic banner state -->
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-xs font-semibold text-slate-300">
+            Paste AppState JSON:
+          </label>
+          <textarea 
+            id="appStateTextarea" 
+            rows="8" 
+            placeholder='[{"key":"c_user","value":"..."},{"key":"xs","value":"..."}]'
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500 custom-scroll"
+          ></textarea>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-xs text-slate-500">
+            <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>
+            Stored locally in <code class="text-slate-400">appState.json</code> &bull; Auto-reconnects bot engine
+          </p>
+          <div class="flex items-center gap-2">
+            <button onclick="stopBot()" class="px-3.5 py-2 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 border border-rose-700/60 shadow-lg shadow-rose-900/20">
+              <i class="fa-solid fa-power-off text-rose-400"></i>
+              <span>Stop Bot</span>
+            </button>
+            <button onclick="restartBot()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700">
+              <i class="fa-solid fa-rotate text-indigo-400"></i>
+              <span>Restart Bot</span>
+            </button>
+            <button id="btnSaveAppState" onclick="saveAppState()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center gap-2 shadow-lg shadow-indigo-600/20">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Save & Connect Bot</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: LIVE LOGS -->
+    <div id="view-logs" class="tab-view hidden space-y-4">
+      <div class="glass p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-terminal text-indigo-400"></i>
+              <span>Console & Live Telemetry Logs</span>
+            </h2>
+            <p class="text-xs text-slate-400">Real-time categorized execution events, admin commands, errors, and system warnings.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="clearLogs()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-trash-can text-slate-400"></i>
+              <span>Clear Logs</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Log Type Filter Bar -->
+        <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80">
+          <span class="text-xs font-semibold text-slate-400 mr-1">Filter:</span>
+          <button onclick="filterLogs('all')" class="log-filter-btn active px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-indigo-400 border border-indigo-500/30">All</button>
+          <button onclick="filterLogs('chat')" class="log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-sky-400 border border-sky-500/20 hover:bg-sky-950/30">💬 MESSAGES</button>
+          <button onclick="filterLogs('master')" class="log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-purple-400 border border-purple-500/20 hover:bg-purple-950/30">👑 MASTER/CMD</button>
+          <button onclick="filterLogs('success')" class="log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-950/30">✅ SUCCESS/SENT</button>
+          <button onclick="filterLogs('error')" class="log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-rose-400 border border-rose-500/20 hover:bg-rose-950/30">❌ ERROR</button>
+          <button onclick="filterLogs('info')" class="log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-950/30">ℹ️ INFO</button>
+          <button onclick="filterLogs('warn')" class="log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-amber-400 border border-amber-500/20 hover:bg-amber-950/30">⚠️ WARN</button>
+        </div>
+
+        <div id="logsOutput" class="h-[420px] bg-slate-950/95 rounded-xl p-4 font-mono text-xs text-slate-300 overflow-y-auto space-y-2 custom-scroll border border-slate-800/90 shadow-inner">
+          <div class="text-slate-500">Connecting to server logs...</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- CONFIG MODAL -->
+  <div id="configModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass max-w-lg w-full rounded-2xl p-6 border border-slate-700 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scroll">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-indigo-400"></i>
+          <span>Bot Configuration (miniconfig.json)</span>
+        </h3>
+        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <form id="configForm" onsubmit="saveConfig(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Bot Name / Nickname</label>
+          <input type="text" id="cfgBotName" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Command Prefix</label>
+            <input type="text" id="cfgPrefix" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Timezone</label>
+            <input type="text" id="cfgTimezone" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Author / Owner Name</label>
+          <input type="text" id="cfgAuthorName" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Author Email</label>
+          <input type="email" id="cfgAuthorEmail" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Author Facebook Profile Link</label>
+          <input type="text" id="cfgAuthorFB" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Admin UIDs (comma-separated)</label>
+          <input type="text" id="cfgAdminBot" placeholder="e.g. 100084729184712, 100092837461928" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="cfgAutoNick" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+          <label for="cfgAutoNick" class="text-xs text-slate-300">Auto set bot nickname in groups</label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+          <button type="button" onclick="closeConfigModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl text-xs text-white">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastMsg">Action completed</span>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <p>© 2026 <span id="footerBotName">Mini-Bot</span> &bull; Developed by <span id="footerAuthor">Aminul Sardar</span></p>
+      <div class="flex items-center space-x-4">
+        <a href="https://github.com/rm7629534-lgtm/Mini-Bot" target="_blank" class="hover:text-slate-300 transition flex items-center gap-1">
+          <i class="fa-brands fa-github"></i>
+          <span>GitHub Repository</span>
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    let commandsData = [];
+    let eventsData = [];
+    let currentConfig = {};
+    let activeCategory = 'all';
+
+    // Tabs
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('bg-indigo-600', 'text-white');
+        el.classList.add('text-slate-400');
+      });
+
+      const targetView = document.getElementById('view-' + tabId);
+      const targetBtn = document.getElementById('tab-' + tabId);
+      if (targetView) targetView.classList.remove('hidden');
+      if (targetBtn) {
+        targetBtn.classList.remove('text-slate-400');
+        targetBtn.classList.add('bg-indigo-600', 'text-white');
+      }
+
+      // Hide/Show command search
+      const searchContainer = document.getElementById('searchContainer');
+      if (searchContainer) {
+        if (tabId === 'commands') {
+          searchContainer.classList.remove('hidden');
+        } else {
+          searchContainer.classList.add('hidden');
+        }
+      }
+    }
+
+    function showToast(msg, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+
+      toastMsg.innerText = msg;
+      if (type === 'error') {
+        toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-400';
+      } else {
+        toastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+      }
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3500);
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        document.getElementById('statStatus').innerText = data.online ? 'Online' : 'Offline';
+        document.getElementById('statPort').innerText = data.port || '3000';
+        document.getElementById('statUptime').innerText = data.uptime || '0s';
+        document.getElementById('statMemory').innerText = (data.memory ? data.memory.heapUsedMB : '--') + ' MB';
+        document.getElementById('statCommandsCount').innerText = data.commandsCount || '0';
+        document.getElementById('tabCmdCount').innerText = data.commandsCount || '0';
+        document.getElementById('statEventsCount').innerText = data.eventsCount || '0';
+        document.getElementById('tabEventCount').innerText = data.eventsCount || '0';
+        document.getElementById('statPrefix').innerText = data.prefix || '/';
+        document.getElementById('statAdminCount').innerText = (data.admins && data.admins.length) || 0;
+        
+        if (data.botID && data.botID !== 'Not Logged In') {
+          document.getElementById('statBotID').innerHTML = `UID: <span class="font-mono text-emerald-400">${data.botID}</span>`;
+        }
+
+        if (data.botName) {
+          document.getElementById('botHeaderTitle').innerText = data.botName;
+          document.getElementById('footerBotName').innerText = data.botName;
+        }
+        if (data.authorName) {
+          document.getElementById('headerAuthor').innerText = data.authorName;
+          document.getElementById('footerAuthor').innerText = data.authorName;
+        }
+      } catch (err) {
+        console.error('Status fetch error:', err);
+      }
+    }
+
+    async function fetchCommands() {
+      try {
+        const res = await fetch('/api/commands');
+        commandsData = await res.json();
+        renderCommands(commandsData);
+      } catch (err) {
+        console.error('Commands fetch error:', err);
+      }
+    }
+
+    function renderCommands(commands) {
+      const grid = document.getElementById('commandsGrid');
+      grid.innerHTML = '';
+
+      if (!commands || commands.length === 0) {
+        grid.innerHTML = `<div class="col-span-3 text-center py-12 text-slate-500 text-xs">No commands found in /script/cmds/</div>`;
+        return;
+      }
+
+      const prefix = document.getElementById('statPrefix').innerText || '/';
+
+      commands.forEach(cmd => {
+        const c = cmd.config || {};
+        const name = c.name || cmd.name || 'unnamed';
+        const roleBadge = c.role === 1 
+          ? '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">Admin</span>' 
+          : '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">All</span>';
+
+        const category = c.category || 'general';
+        const guide = (c.guide || `${prefix}${name}`).replace(/{p}/g, prefix);
+
+        const card = document.createElement('div');
+        card.className = 'glass p-5 rounded-2xl border border-slate-800/90 flex flex-col justify-between hover:border-slate-700 transition hover:-translate-y-0.5';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="flex items-center space-x-2">
+                <span class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-mono font-bold text-xs border border-indigo-500/20">
+                  ${prefix}
+                </span>
+                <div>
+                  <h3 class="text-sm font-bold text-white font-mono">${name}</h3>
+                  <span class="text-[10px] uppercase font-semibold text-slate-400">${category}</span>
+                </div>
+              </div>
+              <div>${roleBadge}</div>
+            </div>
+            <p class="text-xs text-slate-300 mt-2 line-clamp-2">${c.shortDescription || c.longDescription || c.description || 'No description'}</p>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <code class="text-[11px] font-mono text-indigo-300 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-800/40 truncate max-w-[190px]">${guide}</code>
+            <button onclick="copyCommand('${guide.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition flex items-center gap-1.5 border border-slate-700">
+              <i class="fa-regular fa-copy text-[11px] text-indigo-400"></i>
+              <span>Copy</span>
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function fetchEvents() {
+      try {
+        const res = await fetch('/api/events');
+        eventsData = await res.json();
+        renderEvents(eventsData);
+      } catch (err) {
+        console.error('Events fetch error:', err);
+      }
+    }
+
+    function renderEvents(events) {
+      const grid = document.getElementById('eventsGrid');
+      grid.innerHTML = '';
+
+      if (!events || events.length === 0) {
+        grid.innerHTML = `<div class="col-span-3 text-center py-12 text-slate-500 text-xs">No events found in /script/events/</div>`;
+        return;
+      }
+
+      events.forEach(evt => {
+        const c = evt.config || {};
+        const name = c.name || evt.name || 'unnamed';
+        const eventTypes = Array.isArray(c.eventType) ? c.eventType.join(', ') : (c.eventType || 'All events');
+
+        const card = document.createElement('div');
+        card.className = 'glass p-5 rounded-2xl border border-slate-800/90 flex flex-col justify-between';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center space-x-3 mb-2">
+              <span class="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xs border border-cyan-500/20">
+                <i class="fa-solid fa-bolt"></i>
+              </span>
+              <div>
+                <h3 class="text-sm font-bold text-white">${name}</h3>
+                <span class="text-[10px] font-mono text-slate-400">${evt.file || name + '.js'}</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-300 mt-2">${c.description || 'Auto-listens to specific chat activities'}</p>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80">
+            <span class="text-[10px] font-mono text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40">
+              Listener: ${eventTypes}
+            </span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function filterCategory(cat) {
+      activeCategory = cat;
+      document.querySelectorAll('.cat-pill').forEach(btn => {
+        btn.className = 'cat-pill px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white';
+      });
+      event.target.className = 'cat-pill active px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-indigo-400 border border-indigo-500/30';
+
+      if (cat === 'all') {
+        renderCommands(commandsData);
+      } else {
+        const filtered = commandsData.filter(c => ((c.config && c.config.category) || 'general').toLowerCase() === cat);
+        renderCommands(filtered);
+      }
+    }
+
+    function filterCommands(query) {
+      query = query.toLowerCase().trim();
+      const filtered = commandsData.filter(c => {
+        const name = ((c.config && c.config.name) || c.name || '').toLowerCase();
+        const desc = ((c.config && c.config.shortDescription) || (c.config && c.config.description) || '').toLowerCase();
+        const cat = ((c.config && c.config.category) || '').toLowerCase();
+        return name.includes(query) || desc.includes(query) || cat.includes(query);
+      });
+      renderCommands(filtered);
+    }
+
+    function copyCommand(text) {
+      if (!navigator.clipboard) {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast('Copied: ' + text);
+        return;
+      }
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied: ' + text);
+      }).catch(() => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function fetchAppState() {
+      try {
+        const res = await fetch('/api/appstate');
+        const data = await res.json();
+        const banner = document.getElementById('appStateStatusBanner');
+        const textarea = document.getElementById('appStateTextarea');
+
+        if (data.configured && data.count > 0) {
+          banner.className = 'p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 flex items-center justify-between';
+          banner.innerHTML = `
+            <div class="flex items-center space-x-3">
+              <span class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-base">
+                <i class="fa-solid fa-shield-check"></i>
+              </span>
+              <div>
+                <h4 class="text-xs font-bold text-emerald-400">AppState Configured (${data.count} cookies present)</h4>
+                <p class="text-[11px] text-slate-400">The bot has stored session cookies ready for Facebook connection.</p>
+              </div>
+            </div>
+          `;
+        } else {
+          banner.className = 'p-4 rounded-xl border border-amber-500/30 bg-amber-950/20 flex items-center justify-between';
+          banner.innerHTML = `
+            <div class="flex items-center space-x-3">
+              <span class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-base">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+              </span>
+              <div>
+                <h4 class="text-xs font-bold text-amber-400">Empty AppState (Bot in Standby Mode)</h4>
+                <p class="text-[11px] text-slate-400">Paste valid Facebook appState JSON cookies to connect online with Messenger.</p>
+              </div>
+            </div>
+          `;
+        }
+
+        if (data.content) {
+          textarea.value = data.content;
+        }
+      } catch (err) {
+        console.error('AppState fetch error:', err);
+      }
+    }
+
+    async function saveAppState() {
+      const textarea = document.getElementById('appStateTextarea');
+      const btn = document.getElementById('btnSaveAppState');
+      const val = textarea.value.trim();
+
+      try {
+        // Validate JSON
+        if (val) {
+          JSON.parse(val);
+        }
+      } catch (e) {
+        showToast('Invalid JSON format! Please check syntax.', 'error');
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Saving & Starting...</span>';
+      }
+
+      try {
+        const res = await fetch('/api/appstate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appState: val })
+        });
+        const resData = await res.json();
+        if (resData.success) {
+          showToast('✅ AppState saved! Bot is restarting & going online 🚀');
+          fetchAppState();
+          setTimeout(fetchStatus, 1500);
+          setTimeout(fetchLogs, 1500);
+          setTimeout(fetchLogs, 3500);
+        } else {
+          showToast(resData.error || 'Failed to save AppState', 'error');
+        }
+      } catch (err) {
+        showToast('Network error while saving AppState', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>Save & Connect Bot</span>';
+        }
+      }
+    }
+
+    async function restartBot() {
+      try {
+        showToast('🔄 Initiating bot restart...');
+        const res = await fetch('/api/bot/restart', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('🚀 Bot restart in progress. Check Live Logs tab.');
+          setTimeout(fetchStatus, 1200);
+          setTimeout(fetchLogs, 1200);
+        }
+      } catch (e) {
+        showToast('Failed to restart bot', 'error');
+      }
+    }
+
+    async function stopBot() {
+      try {
+        showToast('🛑 Stopping bot engine...');
+        const res = await fetch('/api/bot/stop', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('🛑 Bot engine stopped and is now offline.', 'error');
+          setTimeout(fetchStatus, 600);
+          setTimeout(fetchLogs, 600);
+        } else {
+          showToast('Failed to stop bot engine', 'error');
+        }
+      } catch (e) {
+        showToast('Failed to stop bot', 'error');
+      }
+    }
+
+    async function fetchConfig() {
+      try {
+        const res = await fetch('/api/config');
+        currentConfig = await res.json();
+        
+        document.getElementById('cfgBotName').value = currentConfig.nickNameBot || '';
+        document.getElementById('cfgPrefix').value = currentConfig.prefix || '/';
+        document.getElementById('cfgTimezone').value = currentConfig.timeZone || 'Asia/Dhaka';
+        document.getElementById('cfgAuthorName').value = currentConfig.authorName || '';
+        document.getElementById('cfgAuthorEmail').value = currentConfig.authorEmail || '';
+        document.getElementById('cfgAuthorFB').value = currentConfig.authorFB || '';
+        document.getElementById('cfgAdminBot').value = (currentConfig.adminBot || []).join(', ');
+        document.getElementById('cfgAutoNick').checked = !!currentConfig.autoSetNickname;
+      } catch (err) {
+        console.error('Config fetch error:', err);
+      }
+    }
+
+    function openConfigModal() {
+      fetchConfig();
+      document.getElementById('configModal').classList.remove('hidden');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('configModal').classList.add('hidden');
+    }
+
+    async function saveConfig(e) {
+      e.preventDefault();
+      const updated = {
+        nickNameBot: document.getElementById('cfgBotName').value.trim(),
+        prefix: document.getElementById('cfgPrefix').value.trim() || '/',
+        timeZone: document.getElementById('cfgTimezone').value.trim() || 'Asia/Dhaka',
+        authorName: document.getElementById('cfgAuthorName').value.trim(),
+        authorEmail: document.getElementById('cfgAuthorEmail').value.trim(),
+        authorFB: document.getElementById('cfgAuthorFB').value.trim(),
+        adminBot: document.getElementById('cfgAdminBot').value.split(',').map(s => s.trim()).filter(Boolean),
+        autoSetNickname: document.getElementById('cfgAutoNick').checked
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Configuration updated successfully!');
+          closeConfigModal();
+          refreshAllData();
+        } else {
+          showToast(data.error || 'Failed to update config', 'error');
+        }
+      } catch (err) {
+        showToast('Network error while saving config', 'error');
+      }
+    }
+
+    let rawLogsData = [];
+    let activeLogFilter = 'all';
+
+    function filterLogs(filterType) {
+      activeLogFilter = filterType;
+      document.querySelectorAll('.log-filter-btn').forEach(btn => {
+        btn.className = 'log-filter-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800 hover:text-white';
+      });
+      if (event && event.target) {
+        event.target.className = 'log-filter-btn active px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-indigo-400 border border-indigo-500/30';
+      }
+      renderLogsList();
+    }
+
+    function renderLogsList() {
+      const logsOutput = document.getElementById('logsOutput');
+      if (!logsOutput) return;
+
+      const filtered = activeLogFilter === 'all' 
+        ? rawLogsData 
+        : rawLogsData.filter(l => {
+            const t = (l.type || 'info').toLowerCase();
+            if (activeLogFilter === 'chat' && (t === 'chat' || t === 'msg' || t === 'reply_msg' || t === 'incoming_msg')) return true;
+            if (activeLogFilter === 'master' && (t === 'master' || t === 'cmd' || t === 'command')) return true;
+            if (activeLogFilter === 'success' && (t === 'success' || t === 'succes' || t === 'sent')) return true;
+            if (activeLogFilter === 'warn' && (t === 'warn' || t === 'warning')) return true;
+            return t === activeLogFilter;
+          });
+
+      if (!filtered || filtered.length === 0) {
+        logsOutput.innerHTML = `<div class="text-slate-500 text-center py-8">No ${activeLogFilter === 'all' ? '' : activeLogFilter.toUpperCase()} logs found in buffer.</div>`;
+        return;
+      }
+
+      logsOutput.innerHTML = filtered.map(l => {
+        const time = new Date(l.timestamp).toLocaleTimeString();
+        const rawType = (l.type || 'info').toLowerCase();
+        
+        let badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 uppercase tracking-wider shrink-0">ℹ️ INFO</span>';
+        let textClass = 'text-cyan-200/90';
+        let rowBorder = 'border-slate-900/60 bg-slate-950/60';
+
+        if (rawType === 'chat' || rawType === 'msg' || rawType === 'reply_msg' || rawType === 'incoming_msg') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-950/90 text-sky-300 border border-sky-500/40 uppercase tracking-wider shrink-0 shadow-sm shadow-sky-900/20">💬 MSG</span>';
+          textClass = 'text-sky-200 font-semibold';
+          rowBorder = 'border-sky-950/60 bg-sky-950/15';
+        } else if (rawType === 'error') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/90 text-rose-300 border border-rose-500/40 uppercase tracking-wider shrink-0 shadow-sm shadow-rose-900/20">❌ ERROR</span>';
+          textClass = 'text-rose-200';
+          rowBorder = 'border-rose-950/50 bg-rose-950/10';
+        } else if (rawType === 'master' || rawType === 'cmd' || rawType === 'command') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950/90 text-purple-300 border border-purple-500/40 uppercase tracking-wider shrink-0 shadow-sm shadow-purple-900/20">👑 MASTER</span>';
+          textClass = 'text-purple-200';
+          rowBorder = 'border-purple-950/50 bg-purple-950/10';
+        } else if (rawType === 'success' || rawType === 'succes' || rawType === 'sent') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 uppercase tracking-wider shrink-0 shadow-sm shadow-emerald-900/20">✅ SENT</span>';
+          textClass = 'text-emerald-200';
+          rowBorder = 'border-emerald-950/50 bg-emerald-950/10';
+        } else if (rawType === 'warn' || rawType === 'warning') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/90 text-amber-300 border border-amber-500/40 uppercase tracking-wider shrink-0 shadow-sm shadow-amber-900/20">⚠️ WARN</span>';
+          textClass = 'text-amber-200';
+          rowBorder = 'border-amber-950/50 bg-amber-950/10';
+        }
+
+        return `
+          <div class="flex items-start gap-2.5 p-2 rounded-lg border ${rowBorder} hover:border-slate-700 transition">
+            <span class="text-slate-500 font-mono text-[11px] shrink-0 pt-0.5">${time}</span>
+            ${badge}
+            <span class="${textClass} break-all font-mono leading-relaxed text-[11px]">${escapeHtml(l.message)}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function fetchLogs() {
+      try {
+        const res = await fetch('/api/logs');
+        rawLogsData = await res.json();
+        renderLogsList();
+      } catch (err) {
+        console.error('Logs fetch error:', err);
+      }
+    }
+
+    async function clearLogs() {
+      try {
+        await fetch('/api/logs/clear', { method: 'POST' });
+        rawLogsData = [];
+        renderLogsList();
+        showToast('Logs buffer cleared');
+      } catch (e) {}
+    }
+
+    function refreshAllData() {
+      const icon = document.getElementById('refreshIcon');
+      icon.classList.add('fa-spin');
+      Promise.all([
+        fetchStatus(),
+        fetchCommands(),
+        fetchEvents(),
+        fetchAppState(),
+        fetchLogs()
+      ]).finally(() => {
+        setTimeout(() => icon.classList.remove('fa-spin'), 600);
+      });
+    }
+
+    // Auto-refresh stats every 8s
+    setInterval(fetchStatus, 8000);
+    setInterval(fetchLogs, 10000);
+
+    // Initial load
+    refreshAllData();
+  </script>
+</body>
+</html>

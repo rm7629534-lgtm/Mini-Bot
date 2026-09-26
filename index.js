@@ -1,144 +1,583 @@
 const fca = require("abir-fca");
 const fs = require("fs");
+const path = require("path");
 const http = require("http");
+const logger = require("./utils/logger");
 
 // ==========================================
-// PUBLIC SERVER
+// CONFIGURATION & LOGGING
 // ==========================================
 const PORT = process.env.PORT || 3000;
+const logsBuffer = [];
+const MAX_LOGS = 150;
 
-const server = http.createServer((req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8"
-  });
+logger.setLogBuffer(logsBuffer);
+global.logger = logger;
 
-  res.end(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AMINUL-BOT</title>
-</head>
-<body style="font-family:Arial;text-align:center;padding:50px;">
-  <h1>🤖 𝐀𝐌𝐈𝐍𝐔𝐋-𝐁𝐎𝐓</h1>
-  <h2>🟢 Bot is Running</h2>
-  <p>Bot server is online successfully.</p>
-  <p>Port: ${PORT}</p>
-</body>
-</html>
-  `);
-});
-
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🌐 Public server running on port ${PORT}`);
-});
-
-// ==========================================
-// LOAD MINICONFIG
-// ==========================================
-let config;
-
-try {
-  config = JSON.parse(
-    fs.readFileSync("./miniconfig.json", "utf8")
-  );
-} catch (err) {
-  console.error("❌ miniconfig.json পাওয়া যায়নি বা JSON ভুল!");
-  process.exit(1);
+function addLog(message, type = "info") {
+  const entry = {
+    timestamp: Date.now(),
+    message: String(message),
+    type: type.toLowerCase()
+  };
+  logsBuffer.push(entry);
+  if (logsBuffer.length > MAX_LOGS) {
+    logsBuffer.shift();
+  }
 }
 
-// ==========================================
-// CONFIG
-// ==========================================
-const PREFIX = config.prefix || "/";
-const ADMINS = config.adminBot || [];
-const BOT_NAME = config.nickNameBot || "Goat-Bot-V2";
-const AUTHOR_NAME = config.authorName || "AminulSardar";
-const AUTHOR_EMAIL = config.authorEmail || "";
-const AUTHOR_FB = config.authorFB || "";
-const TIMEZONE = config.timeZone || "Asia/Dhaka";
-const AUTO_NICKNAME = config.autoSetNickname || false;
+// Intercept standard console logs to also pipe to dashboard buffer with proper typing
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
+console.log = function (...args) {
+  originalConsoleLog.apply(console, args);
+  const msg = args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+  let detectedType = "info";
+  if (msg.includes("✅") || msg.toLowerCase().includes("success") || msg.toLowerCase().includes("succes")) detectedType = "success";
+  else if (msg.includes("👑") || msg.toLowerCase().includes("master") || msg.toLowerCase().includes("admin")) detectedType = "master";
+  else if (msg.includes("⚠️") || msg.toLowerCase().includes("warn")) detectedType = "warn";
+  else if (msg.includes("❌") || msg.toLowerCase().includes("error") || msg.toLowerCase().includes("fail")) detectedType = "error";
+  addLog(msg, detectedType);
+};
+
+console.error = function (...args) {
+  originalConsoleError.apply(console, args);
+  addLog(args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" "), "error");
+};
+
+console.warn = function (...args) {
+  originalConsoleWarn.apply(console, args);
+  addLog(args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" "), "warn");
+};
+
+let config = {
+  nickNameBot: "Goat-Bot-V2",
+  prefix: "/",
+  adminBot: ["100084729184712"],
+  autoSetNickname: true,
+  authorName: "AminulSardar",
+  authorEmail: "aminulsardar69@gmail.com",
+  authorFB: "https://facebook.com/aminulsardar69",
+  timeZone: "Asia/Dhaka"
+};
+
+function loadConfig() {
+  try {
+    if (fs.existsSync("./miniconfig.json")) {
+      const raw = fs.readFileSync("./miniconfig.json", "utf8");
+      config = { ...config, ...JSON.parse(raw) };
+    }
+  } catch (err) {
+    console.error("❌ Failed to parse miniconfig.json:", err.message);
+  }
+}
+loadConfig();
 
 const startTime = Date.now();
+let activeBotID = "Not Logged In";
+let botApi = null;
 
 // ==========================================
-// BOT RANDOM REPLIES
+// COMMAND & EVENT LOADERS
 // ==========================================
-const botReplies = [
-  "Hi, I'm messenger Bot, I can help you.?🤖",
-  "Use callad to contact admin!",
-  "Hi, Don't disturb 🤖 🚘 Now I'm going to Feni, Bangladesh..bye",
-  "Hi, 🤖 I can help you~~~~",
-  "আমি এখন আমিনুল বসের সাথে বিজি আছি",
-  "আমাকে আমাকে না ডেকে আমার বসকে ডাকো",
-  "Hmmm sona 🖤 meye hoile kule aso ar sele hoile kule new 🫂😘",
-  "Yah This Bot creator : aminulsardar",
-  "হা বলো, শুনছি আমি 🤸‍♂️🫂",
-  "Ato daktasen kn bujhlam na 😡",
-  "Hmm jan ummah😘😘",
-  "hanga korba 🙂🖤",
-  "iss ato dako keno lojja lage to 🫦🙈",
-  "suna tomare amar valo lage,🙈😽"
-];
+const commands = new Map();
+const events = new Map();
 
-function getRandomReply() {
-  return botReplies[
-    Math.floor(Math.random() * botReplies.length)
-  ];
+function loadCommands() {
+  commands.clear();
+  const cmdsDir = path.join(__dirname, "script", "cmds");
+  if (!fs.existsSync(cmdsDir)) {
+    fs.mkdirSync(cmdsDir, { recursive: true });
+  }
+
+  const files = fs.readdirSync(cmdsDir).filter(f => f.endsWith(".js"));
+  for (const file of files) {
+    try {
+      const filePath = path.join(cmdsDir, file);
+      delete require.cache[require.resolve(filePath)];
+      const cmd = require(filePath);
+      const name = (cmd.config && cmd.config.name) || file.replace(/\.js$/, "");
+      commands.set(name.toLowerCase(), {
+        ...cmd,
+        fileName: file,
+        config: {
+          name,
+          category: (cmd.config && cmd.config.category) || "general",
+          role: (cmd.config && cmd.config.role) !== undefined ? cmd.config.role : 0,
+          shortDescription: (cmd.config && (cmd.config.shortDescription || cmd.config.description)) || "",
+          longDescription: (cmd.config && cmd.config.longDescription) || "",
+          guide: (cmd.config && cmd.config.guide) || `{p}${name}`,
+          author: (cmd.config && cmd.config.author) || config.authorName || "AminulSardar"
+        }
+      });
+      logger.success(`Loaded Command: [${name}]`, "COMMAND");
+    } catch (err) {
+      logger.error(`Failed to load command ${file}: ${err.message}`, "LOADER");
+    }
+  }
 }
 
-// ==========================================
-// FORMAT UPTIME
-// ==========================================
+function loadEvents() {
+  events.clear();
+  const dir = path.join(__dirname, "script", "events");
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    return;
+  }
+
+  const files = fs.readdirSync(dir).filter(f => f.endsWith(".js"));
+  for (const file of files) {
+    try {
+      const filePath = path.join(dir, file);
+      delete require.cache[require.resolve(filePath)];
+      const evt = require(filePath);
+      const name = (evt.config && evt.config.name) || file.replace(/\.js$/, "");
+      events.set(name, {
+        ...evt,
+        fileName: file,
+        dir: "script/events",
+        config: {
+          name,
+          eventType: (evt.config && evt.config.eventType) || ["all"],
+          description: (evt.config && evt.config.description) || "",
+          author: (evt.config && evt.config.author) || config.authorName || "AminulSardar"
+        }
+      });
+      logger.info(`Loaded Event: [${name}] from script/events/`, "EVENT");
+    } catch (err) {
+      logger.error(`Failed to load event ${file}: ${err.message}`, "LOADER");
+    }
+  }
+}
+
+// Initial load
+loadCommands();
+loadEvents();
+
+// Format uptime string
 function formatUptime(ms) {
   const totalSeconds = Math.floor(ms / 1000);
-
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 }
 
 // ==========================================
-// START BOT
+// COMMAND EXECUTION HANDLER
 // ==========================================
-function startBot() {
-  let appState;
+async function executeCommand({ commandName, args, event, api, sendReply }) {
+  const cmd = commands.get(commandName.toLowerCase());
+  if (!cmd) {
+    return false;
+  }
+
+  const role = (cmd.config && cmd.config.role) || 0;
+  const admins = config.adminBot || [];
+  const senderID = String(event.senderID || "");
+  const isSenderAdmin = admins.includes(senderID);
+
+  // Global AdminOnly mode check
+  if (config.adminOnly && !isSenderAdmin && commandName.toLowerCase() !== "adminonly") {
+    sendReply(`🔒 Bot is currently in Admin-Only mode. Only administrators can use commands.`);
+    return true;
+  }
+
+  // Role check: 1 = Admin, 2 = Owner
+  if (role >= 1 && admins.length > 0 && !isSenderAdmin) {
+    sendReply(`❌ Permission Denied! Command '${commandName}' requires administrator privileges.`);
+    return true;
+  }
+
+  const context = {
+    api,
+    event,
+    args,
+    message: args.join(" "),
+    prefix: config.prefix || "/",
+    commands,
+    events,
+    config,
+    loadCommands,
+    loadEvents,
+    botName: config.nickNameBot || "Mini-Bot",
+    authorName: config.authorName || "AminulSardar",
+    startTime,
+    botID: activeBotID,
+    logger
+  };
 
   try {
-    appState = JSON.parse(
-      fs.readFileSync("./appState.json", "utf8")
-    );
+    if (typeof cmd.onStart === "function") {
+      await cmd.onStart(context);
+    } else if (typeof cmd.run === "function") {
+      await cmd.run(context);
+    } else if (typeof cmd.execute === "function") {
+      await cmd.execute(context);
+    }
+    return true;
   } catch (err) {
-    console.error("❌ appState.json পাওয়া যায়নি বা JSON ভুল!");
+    console.error(`❌ Error executing command [${commandName}]:`, err);
+    sendReply(`⚠️ An error occurred while executing ${commandName}: ${err.message}`);
+    return true;
+  }
+}
+
+// ==========================================
+// HTTP PUBLIC SERVER & REST APIS
+// ==========================================
+const server = http.createServer(async (req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = parsedUrl.pathname;
+
+  // Set standard CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    return res.end();
+  }
+
+  // --- API: Bot Status ---
+  if (req.method === "GET" && pathname === "/api/status") {
+    const mem = process.memoryUsage();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(
+      JSON.stringify({
+        online: true,
+        botName: config.nickNameBot || "Mini-Bot",
+        prefix: config.prefix || "/",
+        port: PORT,
+        uptime: formatUptime(Date.now() - startTime),
+        rawUptime: Date.now() - startTime,
+        memory: {
+          heapUsedMB: (mem.heapUsed / 1024 / 1024).toFixed(2),
+          heapTotalMB: (mem.heapTotal / 1024 / 1024).toFixed(2),
+          rssMB: (mem.rss / 1024 / 1024).toFixed(2)
+        },
+        commandsCount: commands.size,
+        eventsCount: events.size,
+        admins: config.adminBot || [],
+        authorName: config.authorName || "AminulSardar",
+        botID: activeBotID
+      })
+    );
+  }
+
+  // --- API: Commands Catalog ---
+  if (req.method === "GET" && pathname === "/api/commands") {
+    const list = Array.from(commands.values()).map(c => ({
+      name: c.config.name,
+      file: c.fileName,
+      config: c.config
+    }));
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify(list));
+  }
+
+  // --- API: Events Catalog ---
+  if (req.method === "GET" && pathname === "/api/events") {
+    const list = Array.from(events.values()).map(e => ({
+      name: e.config.name,
+      file: `${e.dir}/${e.fileName}`,
+      config: e.config
+    }));
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify(list));
+  }
+
+  // --- API: Get Config ---
+  if (req.method === "GET" && pathname === "/api/config") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify(config, null, 2));
+  }
+
+  // --- API: Update Config ---
+  if (req.method === "POST" && pathname === "/api/config") {
+    let body = "";
+    req.on("data", chunk => (body += chunk));
+    req.on("end", () => {
+      try {
+        const newCfg = JSON.parse(body);
+        config = { ...config, ...newCfg };
+        fs.writeFileSync("./miniconfig.json", JSON.stringify(config, null, 2), "utf8");
+        console.log("⚙️ miniconfig.json updated via Dashboard.");
+        res.writeHead(200, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ success: true, config }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    });
     return;
   }
 
+  // --- API: AppState Check ---
+  if (req.method === "GET" && pathname === "/api/appstate") {
+    try {
+      let content = "";
+      let count = 0;
+      if (fs.existsSync("./appState.json")) {
+        content = fs.readFileSync("./appState.json", "utf8");
+        const parsed = JSON.parse(content || "[]");
+        count = Array.isArray(parsed) ? parsed.length : 0;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ configured: count > 0, count, content }));
+    } catch (e) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ configured: false, count: 0, content: "" }));
+    }
+  }
+
+  // --- API: AppState Save & Auto-Restart Bot ---
+  if (req.method === "POST" && pathname === "/api/appstate") {
+    let body = "";
+    req.on("data", chunk => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { appState } = JSON.parse(body);
+        const parsed = JSON.parse(appState || "[]");
+        fs.writeFileSync("./appState.json", JSON.stringify(parsed, null, 2), "utf8");
+        logger.master(`appState.json updated (${parsed.length} cookies). Triggering bot restart & reconnection...`, "AUTH");
+        
+        // Auto restart bot with new cookies
+        setTimeout(() => {
+          startBot();
+        }, 300);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ 
+          success: true, 
+          count: parsed.length,
+          message: "AppState saved! Bot is restarting & going online..." 
+        }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // --- API: Manual Bot Restart ---
+  if (req.method === "POST" && pathname === "/api/bot/restart") {
+    logger.master("Manual bot restart requested from Dashboard.", "MASTER");
+    startBot();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ success: true, message: "Bot restart initiated" }));
+  }
+
+  // --- API: Manual Bot Stop ---
+  if (req.method === "POST" && pathname === "/api/bot/stop") {
+    if (botApi) {
+      try {
+        if (typeof botApi.stopListening === "function") {
+          botApi.stopListening();
+        }
+      } catch (e) {}
+      botApi = null;
+    }
+    activeBotID = null;
+    isConnecting = false;
+    logger.warn("🛑 Bot engine was stopped manually via Dashboard.", "AUTH");
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ success: true, message: "Bot engine stopped successfully" }));
+  }
+
+  // --- API: Logs ---
+  if (req.method === "GET" && pathname === "/api/logs") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify(logsBuffer));
+  }
+
+  if (req.method === "POST" && pathname === "/api/logs/clear") {
+    logsBuffer.length = 0;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ success: true }));
+  }
+
+  // --- API: Command Simulator / Runner ---
+  if (req.method === "POST" && pathname === "/api/execute") {
+    let body = "";
+    req.on("data", chunk => (body += chunk));
+    req.on("end", async () => {
+      try {
+        const { message, senderID = "100084729184712", threadID = "894729104820194" } = JSON.parse(body);
+        const prefix = config.prefix || "/";
+        let capturedReply = null;
+
+        const mockApi = {
+          sendMessage: (msg, tid, mid) => {
+            capturedReply = typeof msg === "object" ? (msg.body || JSON.stringify(msg)) : String(msg);
+            return Promise.resolve({ messageID: "mock_mid_" + Date.now() });
+          },
+          getCurrentUserID: () => activeBotID || "100000000000000",
+          changeNickname: (nick, tid, uid, cb) => {
+            if (cb) cb(null);
+          }
+        };
+
+        const trimmed = (message || "").trim();
+        let cmdName = "";
+        let args = [];
+        let isPrefixed = false;
+
+        if (trimmed.startsWith(prefix)) {
+          const parts = trimmed.slice(prefix.length).trim().split(/\s+/);
+          cmdName = parts[0] || "";
+          args = parts.slice(1);
+          isPrefixed = true;
+        } else {
+          const parts = trimmed.split(/\s+/);
+          const firstWord = (parts[0] || "").toLowerCase();
+          
+          // Check if matches non-prefix command or special trigger
+          if (firstWord === "prefix" || firstWord === "bot" || firstWord === "বট") {
+            cmdName = firstWord === "বট" ? "bot" : firstWord;
+            args = parts.slice(1);
+          } else {
+            // Check loaded commands with hasPrefix === false or nonPrefix === true
+            const candidate = commands.get(firstWord);
+            if (candidate && (candidate.config?.hasPrefix === false || candidate.config?.nonPrefix === true)) {
+              cmdName = firstWord;
+              args = parts.slice(1);
+            }
+          }
+        }
+
+        if (cmdName) {
+          const executed = await executeCommand({
+            commandName: cmdName,
+            args,
+            event: {
+              type: "message",
+              body: trimmed,
+              senderID,
+              threadID,
+              messageID: "sim_" + Date.now()
+            },
+            api: mockApi,
+            sendReply: msg => (capturedReply = msg)
+          });
+
+          if (!executed && isPrefixed) {
+            capturedReply = `Command "${cmdName}" does not exist, type help to see all available commands`;
+          }
+        } else {
+          capturedReply = `🤖 [Echo]: Received "${trimmed}". Use ${prefix}help to view commands.`;
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({
+          success: true,
+          reply: capturedReply,
+          botName: config.nickNameBot || "Mini-Bot"
+        }));
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // --- Serve public/index.html & Static Files ---
+  let filePath = path.join(__dirname, "public", pathname === "/" ? "index.html" : pathname);
+  if (!fs.existsSync(filePath)) {
+    filePath = path.join(__dirname, "public", "index.html");
+  }
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      ".html": "text/html; charset=utf-8",
+      ".js": "application/javascript",
+      ".css": "text/css",
+      ".json": "application/json",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".svg": "image/svg+xml",
+      ".ico": "image/x-icon"
+    };
+    const contentType = mimeTypes[ext] || "text/plain";
+    res.writeHead(200, { "Content-Type": contentType });
+    return res.end(fs.readFileSync(filePath));
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.end("Not Found");
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`🌐 Public server running on http://0.0.0.0:${PORT}`);
+});
+
+// ==========================================
+// START FACEBOOK BOT ENGINE
+// ==========================================
+let isConnecting = false;
+
+function startBot() {
+  if (isConnecting) {
+    logger.warn("Bot is already in the process of logging in...", "LOGIN");
+    return;
+  }
+  isConnecting = true;
+
+  // Cleanup old session if active
+  if (botApi) {
+    try {
+      if (typeof botApi.stopListening === "function") {
+        botApi.stopListening();
+      }
+    } catch (e) {}
+    botApi = null;
+  }
+  activeBotID = null;
+
+  let appState = [];
+
+  try {
+    if (fs.existsSync("./appState.json")) {
+      const raw = fs.readFileSync("./appState.json", "utf8");
+      appState = JSON.parse(raw || "[]");
+    }
+  } catch (err) {
+    logger.error(`appState.json parse error: ${err.message}`, "AUTH");
+    isConnecting = false;
+    return;
+  }
+
+  if (!Array.isArray(appState) || appState.length === 0) {
+    logger.warn("appState.json is currently empty. Web dashboard is live & waiting for login credentials.", "AUTH");
+    isConnecting = false;
+    return;
+  }
+
+  logger.info(`Starting Facebook login using ${appState.length} session cookies...`, "LOGIN");
   fca.login(
     {
       appState: appState
     },
     (err, api) => {
+      isConnecting = false;
       if (err) {
-        console.error("❌ Facebook Login Failed:");
-        console.error(err);
+        logger.error(`Facebook Login Failed: ${err.message || err}`, "LOGIN");
         return;
       }
 
-      const botID = api.getCurrentUserID();
+      botApi = api;
+      activeBotID = api.getCurrentUserID();
 
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      console.log(`🤖 ${BOT_NAME}`);
-      console.log("✅ Bot Started Successfully");
-      console.log(`🆔 Bot UID: ${botID}`);
-      console.log(`👤 Created by ${AUTHOR_NAME}`);
-      console.log(`⚙️ Prefix: ${PREFIX}`);
-      console.log(`🕐 Timezone: ${TIMEZONE}`);
-      console.log(`🌐 Port: ${PORT}`);
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      logger.master(`Bot Connected: ${config.nickNameBot} (UID: ${activeBotID})`, "MASTER");
+      logger.success(`Bot Engine is now ONLINE & Active!`, "SUCCESS");
+      logger.info(`Owner: ${config.authorName} | Prefix: ${config.prefix} | TimeZone: ${config.timeZone}`, "CONFIG");
 
       api.setOptions({
         listenEvents: true,
@@ -147,344 +586,118 @@ function startBot() {
         autoMarkDelivery: false
       });
 
-      // ========================================
-      // AUTO NICKNAME
-      // ========================================
-      if (AUTO_NICKNAME) {
+      // Auto Nickname
+      if (config.autoSetNickname) {
         try {
           api.changeNickname(
-            BOT_NAME,
+            config.nickNameBot,
             null,
-            botID,
-            (error) => {
-              if (error) {
-                console.log("⚠️ Auto nickname failed.");
-              } else {
-                console.log(`✅ Nickname: ${BOT_NAME}`);
-              }
+            activeBotID,
+            error => {
+              if (!error) console.log(`✅ Nickname set: ${config.nickNameBot}`);
             }
           );
-        } catch (error) {
-          console.log("⚠️ Nickname feature unavailable.");
-        }
+        } catch (e) {}
       }
 
-      // ========================================
-      // LISTEN EVENTS
-      // ========================================
-      api.listenMqtt((err, event) => {
-        if (err) {
-          console.error("❌ Listen Error:", err);
+      // Listen MQTT Events
+      api.listenMqtt(async (listenErr, event) => {
+        if (listenErr) {
+          logger.error(`Listen MQTT Error: ${listenErr.message || listenErr}`, "LISTEN");
           return;
         }
 
-        // ======================================
-        // NEW MEMBER / BOT ADDED
-        // ======================================
-        if (event.logMessageType === "log:subscribe") {
-          const threadID = event.threadID;
+        if (!event) return;
 
-          const participants =
-            event.logMessageData &&
-            event.logMessageData.addedParticipants;
+        // Log Chat Messages
+        if (event.type === "message" || event.type === "message_reply") {
+          const msgContent = event.body || (event.attachments && event.attachments.length ? `[${event.attachments.length} Attachment(s)]` : "[Empty Message]");
+          const tag = event.type === "message_reply" ? "REPLY_MSG" : "INCOMING_MSG";
+          logger.chat(`[Thread: ${event.threadID}] [User: ${event.senderID}] 💬 "${msgContent}"`, tag);
+        } else if (event.logMessageType) {
+          logger.info(`[Chat Event: ${event.logMessageType}] Thread: ${event.threadID} | Author: ${event.author || event.senderID || "System"}`, "EVENT");
+        }
 
-          if (!participants) return;
-
-          const botWasAdded = participants.some(
-            user =>
-              String(user.userFbId) === String(botID)
-          );
-
-          if (botWasAdded) {
-            return api.sendMessage(
-              `🤖 Hello everyone!
-
-আমি ${BOT_NAME} 🫡
-
-আমাকে এই group-এ add করার জন্য ধন্যবাদ ❤️
-
-━━━━━━━━━━━━━━━━
-⚙️ Prefix: ${PREFIX}
-📚 Help: ${PREFIX}help
-🏓 Ping: ${PREFIX}ping
-🆔 UID: ${PREFIX}uid
-ℹ️ Info: ${PREFIX}info
-━━━━━━━━━━━━━━━━
-
-👤 Created by ${AUTHOR_NAME}`,
-              threadID
-            );
-          }
-
-          const names = participants
-            .filter(
-              user =>
-                String(user.userFbId) !== String(botID)
-            )
-            .map(user => user.fullName)
-            .filter(Boolean);
-
-          if (names.length) {
-            return api.sendMessage(
-              `🎉 Welcome ${names.join(", ")}!
-
-🤖 Welcome to the group!
-
-⚙️ Type ${PREFIX}help to see my commands.`,
-              threadID
-            );
+        // Dispatch to event handlers
+        for (const [evtName, evtModule] of events.entries()) {
+          try {
+            const types = (evtModule.config && evtModule.config.eventType) || ["all"];
+            if (types.includes("all") || (event.logMessageType && types.includes(event.logMessageType))) {
+              const evtContext = {
+                api,
+                event,
+                botID: activeBotID,
+                botName: config.nickNameBot,
+                prefix: config.prefix,
+                authorName: config.authorName,
+                config,
+                logger
+              };
+              if (typeof evtModule.onStart === "function") {
+                await evtModule.onStart(evtContext);
+              } else if (typeof evtModule.run === "function") {
+                await evtModule.run(evtContext);
+              }
+            }
+          } catch (eventErr) {
+            logger.error(`Event error in [${evtName}]: ${eventErr.message}`, "EVENT");
           }
         }
 
-        // ======================================
-        // MEMBER LEFT
-        // ======================================
-        if (event.logMessageType === "log:unsubscribe") {
-          const threadID = event.threadID;
-
-          const leftID =
-            event.logMessageData &&
-            event.logMessageData.leftParticipantFbId;
-
-          if (!leftID) return;
-
-          if (String(leftID) === String(botID)) {
-            console.log(
-              `❌ Bot removed from group: ${threadID}`
-            );
-            return;
-          }
-
-          return api.sendMessage(
-            `👋 Goodbye!
-
-A member has left the group.
-
-🆔 UID: ${leftID}
-
-Take care! ❤️`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // NORMAL MESSAGE
-        // ======================================
-        if (event.type !== "message") return;
+        // Handle Messages
+        if (event.type !== "message" && event.type !== "message_reply") return;
         if (!event.body) return;
 
         const body = event.body.trim();
-        const lower = body.toLowerCase();
+        const prefix = config.prefix || "/";
 
-        const threadID = event.threadID;
-        const senderID = event.senderID;
+        let cmdName = "";
+        let args = [];
+        let isPrefixed = false;
 
-        console.log(`📩 ${senderID}: ${body}`);
-
-        // ======================================
-        // BOT
-        // ======================================
-        if (lower === "bot") {
-          return api.sendMessage(
-            getRandomReply(),
-            threadID
-          );
-        }
-
-        // ======================================
-        // PREFIX
-        // ======================================
-        if (lower === "prefix") {
-          return api.sendMessage(
-            `⚙️ My prefix is: ${PREFIX}`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // PING
-        // ======================================
-        if (lower === `${PREFIX}ping`) {
-          const start = Date.now();
-
-          return api.sendMessage(
-            `🏓 Pong!
-
-🤖 ${BOT_NAME}
-⚡ Response: ${Date.now() - start}ms
-🟢 Status: Online`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // HELP
-        // ======================================
-        if (lower === `${PREFIX}help`) {
-          return api.sendMessage(
-            `📚 ${BOT_NAME} — HELP
-
-━━━━━━━━━━━━━━━━━━━━
-🤖 GENERAL
-━━━━━━━━━━━━━━━━━━━━
-
-${PREFIX}ping
-${PREFIX}help
-${PREFIX}uid
-${PREFIX}uptime
-${PREFIX}info
-
-━━━━━━━━━━━━━━━━━━━━
-👑 ADMIN
-━━━━━━━━━━━━━━━━━━━━
-
-${PREFIX}admin
-
-━━━━━━━━━━━━━━━━━━━━
-💬 OTHER
-━━━━━━━━━━━━━━━━━━━━
-
-${PREFIX}say <text>
-
-━━━━━━━━━━━━━━━━━━━━
-⚡ EXTRA
-━━━━━━━━━━━━━━━━━━━━
-
-bot
-prefix
-
-━━━━━━━━━━━━━━━━━━━━
-👤 Author: ${AUTHOR_NAME}`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // UID
-        // ======================================
-        if (lower === `${PREFIX}uid`) {
-          return api.sendMessage(
-            `🆔 YOUR UID
-
-${senderID}`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // ADMIN
-        // ======================================
-        if (lower === `${PREFIX}admin`) {
-          if (!ADMINS.length) {
-            return api.sendMessage(
-              "❌ No admin configured.",
-              threadID
-            );
+        if (body.startsWith(prefix)) {
+          const parts = body.slice(prefix.length).trim().split(/\s+/);
+          cmdName = parts[0] || "";
+          args = parts.slice(1);
+          isPrefixed = true;
+        } else {
+          const parts = body.split(/\s+/);
+          const firstWord = (parts[0] || "").toLowerCase();
+          
+          if (firstWord === "prefix" || firstWord === "bot" || firstWord === "বট") {
+            cmdName = firstWord === "বট" ? "bot" : firstWord;
+            args = parts.slice(1);
+          } else {
+            const candidate = commands.get(firstWord);
+            if (candidate && (candidate.config?.hasPrefix === false || candidate.config?.nonPrefix === true)) {
+              cmdName = firstWord;
+              args = parts.slice(1);
+            }
           }
-
-          const list = ADMINS
-            .map((id, i) => `${i + 1}. ${id}`)
-            .join("\n");
-
-          return api.sendMessage(
-            `👑 ${BOT_NAME} — ADMIN LIST
-
-━━━━━━━━━━━━━━━━
-${list}
-━━━━━━━━━━━━━━━━
-
-Total Admin: ${ADMINS.length}`,
-            threadID
-          );
         }
 
-        // ======================================
-        // UPTIME
-        // ======================================
-        if (lower === `${PREFIX}uptime`) {
-          return api.sendMessage(
-            `⏱️ BOT UPTIME
+        if (cmdName) {
+          logger.master(`Executing [${cmdName}] with args: [${args.join(" ")}] by UID: ${event.senderID}`, "CMD");
+          const executed = await executeCommand({
+            commandName: cmdName,
+            args,
+            event,
+            api,
+            sendReply: (msg, cb) => {
+              const preview = typeof msg === "string" ? msg : (msg && msg.body ? msg.body : "[Attachment/Object]");
+              logger.success(`[Bot Sent] -> "${preview.length > 80 ? preview.substring(0, 80) + "..." : preview}"`, "SENT");
+              return api.sendMessage(msg, event.threadID, cb || event.messageID);
+            }
+          });
 
-🤖 Bot: ${BOT_NAME}
-⏳ Uptime: ${formatUptime(
-              Date.now() - startTime
-            )}
-🟢 Status: Online`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // INFO
-        // ======================================
-        if (lower === `${PREFIX}info`) {
-          return api.sendMessage(
-            `🤖 ${BOT_NAME}
-
-━━━━━━━━━━━━━━━━━━━━
-📌 BOT INFORMATION
-━━━━━━━━━━━━━━━━━━━━
-
-🤖 Name: ${BOT_NAME}
-📦 Version: 1.0.0
-⚙️ Prefix: ${PREFIX}
-👑 Admins: ${ADMINS.length}
-🕐 Timezone: ${TIMEZONE}
-🌐 Port: ${PORT}
-
-👤 Author: ${AUTHOR_NAME}
-📧 Email: ${AUTHOR_EMAIL || "Not set"}
-🔗 Facebook: ${AUTHOR_FB || "Not set"}
-
-⏱️ Uptime:
-${formatUptime(Date.now() - startTime)}
-
-━━━━━━━━━━━━━━━━━━━━`,
-            threadID
-          );
-        }
-
-        // ======================================
-        // SAY
-        // ======================================
-        if (lower.startsWith(`${PREFIX}say `)) {
-          const text = body
-            .slice(`${PREFIX}say `.length)
-            .trim();
-
-          if (!text) {
-            return api.sendMessage(
-              `❌ Usage: ${PREFIX}say <text>`,
-              threadID
-            );
+          if (!executed && isPrefixed) {
+            api.sendMessage(`Command "${cmdName}" does not exist, type ${prefix}help to see all available commands`, event.threadID, event.messageID);
           }
-
-          return api.sendMessage(text, threadID);
-        }
-
-        // ======================================
-        // HELLO
-        // ======================================
-        if (
-          lower === "hi" ||
-          lower === "hello" ||
-          lower === "hey"
-        ) {
-          return api.sendMessage(
-            `👋 Hello!
-
-🤖 ${BOT_NAME}
-
-Type ${PREFIX}help to see all commands.`,
-            threadID
-          );
         }
       });
     }
   );
 }
 
-// ==========================================
-// RUN BOT
-// ==========================================
+// Start bot
 startBot();

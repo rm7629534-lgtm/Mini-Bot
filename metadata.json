@@ -1,0 +1,5 @@
+{
+  "name": "Mini-Bot",
+  "description": "Facebook Messenger Bot with public status server and command handlers",
+  "version": "1.0.0"
+}
