@@ -609,13 +609,12 @@ function startBot() {
 
   try {
     if (fs.existsSync("./appState.json")) {
-      const raw = fs.readFileSync("./appState.json", "utf8");
-      appState = JSON.parse(raw || "[]");
+      const raw = fs.readFileSync("./appState.json", "utf8").trim();
+      appState = raw ? JSON.parse(raw) : [];
     }
   } catch (err) {
-    logger.error(`appState.json parse error: ${err.message}`, "AUTH");
-    isConnecting = false;
-    return;
+    logger.warn(`appState.json is invalid or empty JSON (${err.message}). Ready for input via Dashboard.`, "AUTH");
+    appState = [];
   }
 
   if (!Array.isArray(appState) || appState.length === 0) {
@@ -648,8 +647,7 @@ function startBot() {
         listenEvents: true,
         selfListen: false,
         autoMarkRead: false,
-        forceLogin: true,
-        logLevel: "silent"
+        forceLogin: true
       });
 
       // Listen MQTT Events (Auto-nickname is handled upon group join events in script/events/autoNick.js)
