@@ -52,6 +52,19 @@ console.warn = function (...args) {
   addLog(args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" "), "warn");
 };
 
+// Global exception & promise rejection handlers
+process.on("unhandledRejection", (reason) => {
+  const reasonStr = reason instanceof Error ? reason.message : String(reason);
+  if (!reasonStr.includes("MQTT client is not initialized") && !reasonStr.includes("MQTT keep alive")) {
+    logger.warn(`Unhandled Promise: ${reasonStr}`, "SYSTEM");
+  }
+});
+
+process.on("uncaughtException", (err) => {
+  const errStr = err instanceof Error ? err.message : String(err);
+  logger.error(`Uncaught Exception: ${errStr}`, "SYSTEM");
+});
+
 let config = {
   nickNameBot: "Goat-Bot-V2",
   prefix: "/",
@@ -635,26 +648,11 @@ function startBot() {
         listenEvents: true,
         selfListen: false,
         autoMarkRead: false,
-        autoMarkDelivery: false,
-        online: true,
-        forceLogin: true
+        forceLogin: true,
+        logLevel: "silent"
       });
 
-      // Auto Nickname
-      if (config.autoSetNickname) {
-        try {
-          api.changeNickname(
-            config.nickNameBot,
-            null,
-            activeBotID,
-            error => {
-              if (!error) console.log(`✅ Nickname set: ${config.nickNameBot}`);
-            }
-          );
-        } catch (e) {}
-      }
-
-      // Listen MQTT Events
+      // Listen MQTT Events (Auto-nickname is handled upon group join events in script/events/autoNick.js)
       api.listenMqtt(async (listenErr, event) => {
         if (listenErr) {
           const formattedErr = stringifyError(listenErr);

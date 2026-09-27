@@ -17,22 +17,25 @@ module.exports = {
       user => String(user.userFbId) === String(botID)
     );
 
-    if (botWasAdded) {
+    if (botWasAdded && event.threadID && typeof api.changeNickname === "function") {
       try {
-        api.changeNickname(
+        const promiseOrReq = api.changeNickname(
           botName || "Mini-Bot",
           event.threadID,
           botID,
           (err) => {
             if (err) {
-              console.log(`⚠️ Auto nickname setting failed in thread ${event.threadID}`);
+              // Silently ignore permission limitations
             } else {
               console.log(`✅ Set nickname to "${botName}" in thread ${event.threadID}`);
             }
           }
         );
+        if (promiseOrReq && typeof promiseOrReq.catch === "function") {
+          promiseOrReq.catch(() => {});
+        }
       } catch (e) {
-        console.error("AutoNick error:", e);
+        // Safe failover
       }
     }
   },
