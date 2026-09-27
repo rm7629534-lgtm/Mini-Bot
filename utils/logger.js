@@ -56,11 +56,36 @@ function formatTime() {
   return d.toLocaleTimeString("en-US", { hour12: false });
 }
 
+function formatLogMessage(message) {
+  if (message === null || message === undefined) return "";
+  if (typeof message === "string") return message;
+  if (message instanceof Error) {
+    return `${message.name}: ${message.message}${message.stack ? `\n${message.stack}` : ""}`.trim();
+  }
+  if (typeof message === "object") {
+    try {
+      if (message.error && typeof message.error === "object") {
+        return JSON.stringify(message.error, null, 2);
+      }
+      if (message.message) return String(message.message);
+      if (message.error) return String(message.error);
+      const json = JSON.stringify(message, null, 2);
+      return json === "{}" && typeof message.toString === "function" && message.toString() !== "[object Object]"
+        ? message.toString()
+        : json;
+    } catch (e) {
+      return String(message);
+    }
+  }
+  return String(message);
+}
+
 function pushToBuffer(message, type = "info") {
+  const formatted = formatLogMessage(message);
   if (logBufferRef && Array.isArray(logBufferRef)) {
     logBufferRef.push({
       timestamp: Date.now(),
-      message: String(message),
+      message: formatted,
       type: type.toLowerCase()
     });
     if (logBufferRef.length > 250) {
@@ -74,7 +99,7 @@ const logger = {
 
   chat: function (message, tag = "MSG") {
     const time = formatTime();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${colors.chatTag} 💬 ${tag} ${colors.reset} ${colors.chatText}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "chat");
@@ -82,7 +107,7 @@ const logger = {
 
   error: function (message, tag = "ERROR") {
     const time = formatTime();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${colors.errorTag} ${tag} ${colors.reset} ${colors.errorText}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "error");
@@ -90,7 +115,7 @@ const logger = {
 
   master: function (message, tag = "MASTER") {
     const time = formatTime();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${colors.masterTag} 👑 ${tag} ${colors.reset} ${colors.masterText}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "master");
@@ -98,7 +123,7 @@ const logger = {
 
   success: function (message, tag = "SUCCESS") {
     const time = formatTime();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${colors.successTag} ✅ ${tag} ${colors.reset} ${colors.successText}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "success");
@@ -111,7 +136,7 @@ const logger = {
 
   info: function (message, tag = "INFO") {
     const time = formatTime();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${colors.infoTag} ℹ️ ${tag} ${colors.reset} ${colors.infoText}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "info");
@@ -119,7 +144,7 @@ const logger = {
 
   warn: function (message, tag = "WARN") {
     const time = formatTime();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${colors.warnTag} ⚠️ ${tag} ${colors.reset} ${colors.warnText}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "warn");
@@ -128,7 +153,7 @@ const logger = {
   cycle: function (message, tag = "LOG") {
     const time = formatTime();
     const cycleColor = getNextCycleColor();
-    const str = typeof message === "object" ? JSON.stringify(message, null, 2) : String(message);
+    const str = formatLogMessage(message);
     const consoleOutput = `${colors.time}[${time}] ${cycleColor}${colors.bold}[ ${tag} ]${colors.reset} ${cycleColor}${str}${colors.reset}`;
     process.stdout.write(consoleOutput + "\n");
     pushToBuffer(str, "info");

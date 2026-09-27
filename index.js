@@ -542,8 +542,39 @@ server.listen(PORT, "0.0.0.0", () => {
 // START FACEBOOK BOT ENGINE
 // ==========================================
 let isConnecting = false;
+let reconnectTimer = null;
+
+function stringifyError(err) {
+  if (!err) return "Unknown error";
+  if (typeof err === "string") return err;
+  if (err instanceof Error) {
+    return err.message || err.toString();
+  }
+  if (typeof err === "object") {
+    if (err.error && typeof err.error === "object") {
+      return JSON.stringify(err.error);
+    }
+    if (err.message) return String(err.message);
+    if (err.error) return String(err.error);
+    if (err.type || err.code || err.reason) {
+      return `Type: ${err.type || "N/A"}, Code: ${err.code || "N/A"}, Reason: ${err.reason || err.description || "N/A"}`;
+    }
+    try {
+      const json = JSON.stringify(err);
+      return json === "{}" ? "MQTT Connection Glitch / Socket Reset" : json;
+    } catch (e) {
+      return String(err);
+    }
+  }
+  return String(err);
+}
 
 function startBot() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   if (isConnecting) {
     logger.warn("Bot is already in the process of logging in...", "LOGIN");
     return;
@@ -588,7 +619,8 @@ function startBot() {
     (err, api) => {
       isConnecting = false;
       if (err) {
-        logger.error(`Facebook Login Failed: ${err.message || err}`, "LOGIN");
+        const errMsg = stringifyError(err);
+        logger.error(`Facebook Login Failed: ${errMsg}`, "LOGIN");
         return;
       }
 
@@ -603,7 +635,9 @@ function startBot() {
         listenEvents: true,
         selfListen: false,
         autoMarkRead: false,
-        autoMarkDelivery: false
+        autoMarkDelivery: false,
+        online: true,
+        forceLogin: true
       });
 
       // Auto Nickname
@@ -623,7 +657,25 @@ function startBot() {
       // Listen MQTT Events
       api.listenMqtt(async (listenErr, event) => {
         if (listenErr) {
-          logger.error(`Listen MQTT Error: ${listenErr.message || listenErr}`, "LISTEN");
+          const formattedErr = stringifyError(listenErr);
+          
+          // Filter harmless MQTT keep-alive / retry noise if present
+          if (typeof formattedErr === "string" && formattedErr.includes("MQTT keep alive timeout")) {
+            logger.warn(`MQTT keep-alive ping: ${formattedErr}`, "MQTT");
+            return;
+          }
+
+          logger.error(`Listen MQTT Error: ${formattedErr}`, "LISTEN");
+
+          // If connection dropped or socket destroyed, schedule auto reconnect
+          const isDisconnect = /disconnect|closed|socket|token|reset|timeout|destroy|network|econnreset/i.test(formattedErr);
+          if (isDisconnect && !reconnectTimer) {
+            logger.warn("MQTT socket disconnected. Auto-reconnecting in 6 seconds...", "RECONNECT");
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null;
+              startBot();
+            }, 6000);
+          }
           return;
         }
 
