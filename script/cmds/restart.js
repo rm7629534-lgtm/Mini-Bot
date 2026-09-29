@@ -18,11 +18,22 @@ module.exports = {
       return api.sendMessage("❌ Permission denied! This command is only available to bot administrators.", event.threadID, event.messageID);
     }
 
-    await api.sendMessage("🔄 Restarting bot system... Please wait a moment.", event.threadID, event.messageID);
+    await api.sendMessage("🔄 Reloading commands, events, and refreshing bot session...", event.threadID, event.messageID);
 
-    setTimeout(() => {
-      process.exit(0);
-    }, 1000);
+    try {
+      if (typeof loadCommands === "function") loadCommands();
+      if (typeof loadEvents === "function") loadEvents();
+      if (typeof startBot === "function") {
+        setTimeout(() => {
+          startBot();
+        }, 500);
+      }
+      setTimeout(() => {
+        api.sendMessage(`✅ Bot reloaded successfully!\n• Commands: ${commands ? commands.size : 0} loaded\n• Events: ${events ? events.size : 0} active`, event.threadID);
+      }, 1200);
+    } catch (e) {
+      api.sendMessage(`⚠️ Reload error: ${e.message}`, event.threadID);
+    }
   },
   run: async function (params) {
     return module.exports.onStart(params);

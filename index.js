@@ -236,6 +236,7 @@ async function executeCommand({ commandName, args, event, api, sendReply }) {
     config,
     loadCommands,
     loadEvents,
+    startBot,
     botName: config.nickNameBot || "Mini-Bot",
     authorName: config.authorName || "AminulSardar",
     startTime,
@@ -588,6 +589,14 @@ function startBot() {
     reconnectTimer = null;
   }
 
+  // Reload commands & events on each restart
+  try {
+    loadCommands();
+    loadEvents();
+  } catch (e) {
+    logger.warn(`Reload loader warning: ${e.message}`, "LOADER");
+  }
+
   if (isConnecting) {
     logger.warn("Bot is already in the process of logging in...", "LOGIN");
     return;
@@ -623,12 +632,21 @@ function startBot() {
     return;
   }
 
+  // Safety login timeout to prevent stuck connecting state
+  const loginSafetyTimeout = setTimeout(() => {
+    if (isConnecting) {
+      isConnecting = false;
+      logger.warn("Login attempt took more than 20s. Resetting connection state for retry.", "LOGIN");
+    }
+  }, 20000);
+
   logger.info(`Starting Facebook login using ${appState.length} session cookies...`, "LOGIN");
   fca.login(
     {
       appState: appState
     },
     (err, api) => {
+      clearTimeout(loginSafetyTimeout);
       isConnecting = false;
       if (err) {
         const errMsg = stringifyError(err);
@@ -638,6 +656,16 @@ function startBot() {
 
       botApi = api;
       activeBotID = api.getCurrentUserID();
+
+      // Automatically sync latest cookies to keep session alive across future restarts
+      try {
+        if (typeof api.getAppState === "function") {
+          const freshCookies = api.getAppState();
+          if (Array.isArray(freshCookies) && freshCookies.length > 0) {
+            fs.writeFileSync("./appState.json", JSON.stringify(freshCookies, null, 2), "utf8");
+          }
+        }
+      } catch (e) {}
 
       logger.master(`Bot Connected: ${config.nickNameBot} (UID: ${activeBotID})`, "MASTER");
       logger.success(`Bot Engine is now ONLINE & Active!`, "SUCCESS");
